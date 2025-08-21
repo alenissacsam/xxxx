@@ -1,0 +1,157 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.30;
+
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import {UserVerification} from "./UserVerification.sol";
+
+/**
+ * @title EventTicket
+ * @author alenissacsam
+ * @dev A smart contract for managing event tickets on the blockchain.
+ * It allows event organizers to mint tickets, verify users, and manage ticket sales.
+ */
+contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    error EventTicket__UserNotVerified();
+    error EventTicket__mintCooldown(address user, uint256 lastMintTime);
+    error EventTicket__ZeroAddressNotAllowed();
+    error EventTicket__InvalidOrganizerPercentage(uint256 percentage);
+    error EventTicket__OrganizerPaymentFailed();
+    error EventTicket__PlatformPaymentFailed();
+
+    /*//////////////////////////////////////////////////////////////
+                               VARIABLES
+    //////////////////////////////////////////////////////////////*/
+    struct TicketInfo {
+        string eventName;
+        string seatNumber;
+        bool isVIP;
+        uint256 mintedAt;
+    }
+
+    uint256 public maxSupply;
+    uint256 public mintPrice;
+    address public eventOrganizer;
+    address public platformAddress;
+    uint256 public nextTicketId = 0;
+
+    mapping(address user => uint256) lastMintTime;
+    mapping(uint256 tokenId => TicketInfo) tickets;
+
+    uint256 public constant MINT_COOLDOWN = 5 seconds;
+    uint256 public immutable i_organizerPercentage; // 95% to organizer
+    uint256 public immutable i_royaltyFeePercentage; // royalty fee on secondary Markets
+    address public immutable i_userVerfierAddress;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event TicketMinted(address indexed user, uint256 indexed ticketId, string seatNumber, bool isVIP);
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    modifier onlyVerified() {
+        if (!UserVerification(i_userVerfierAddress).isVerified(msg.sender)) {
+            revert EventTicket__UserNotVerified();
+        }
+        _;
+    }
+
+    modifier mintCooldown() {
+        if (block.timestamp < lastMintTime[msg.sender] + MINT_COOLDOWN) {
+            revert EventTicket__mintCooldown(msg.sender, block.timestamp);
+        }
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    constructor(
+        string memory name,
+        string memory symbol,
+        uint256 _maxSupply,
+        uint256 _mintPrice,
+        address _eventOrganizer,
+        address _platformAddress,
+        uint256 _organizerPercentage,
+        address _userVerfierAddress,
+        uint256 _royaltyFeePercentage
+    ) ERC721(name, symbol) Ownable(msg.sender) {
+        maxSupply = _maxSupply;
+        mintPrice = _mintPrice;
+        if (_organizerPercentage > 100) {
+            revert EventTicket__InvalidOrganizerPercentage(_organizerPercentage);
+        }
+        if (_eventOrganizer == address(0) || _platformAddress == address(0) || _userVerfierAddress == address(0)) {
+            revert EventTicket__ZeroAddressNotAllowed();
+        }
+        eventOrganizer = _eventOrganizer;
+        platformAddress = _platformAddress;
+        i_organizerPercentage = _organizerPercentage;
+        i_userVerfierAddress = _userVerfierAddress;
+        i_royaltyFeePercentage = _royaltyFeePercentage;
+    }
+
+    function mintTicket(string memory _eventName, string memory _seatNumber, bool _isVIP, string memory tokenURI)
+        external
+        payable
+        onlyVerified
+        mintCooldown
+        nonReentrant
+    {
+        require(nextTicketId < maxSupply, "Max supply reached");
+        require(msg.value >= mintPrice, "Insufficient payment");
+
+        uint256 ticketId = nextTicketId++;
+
+        tickets[ticketId] =
+            TicketInfo({eventName: _eventName, seatNumber: _seatNumber, isVIP: _isVIP, mintedAt: block.timestamp});
+
+        _safeMint(msg.sender, ticketId);
+        _setTokenURI(ticketId, tokenURI);
+        lastMintTime[msg.sender] = block.timestamp;
+
+        // Distribute funds
+        uint256 organizerShare = (msg.value * i_organizerPercentage) / 100;
+        uint256 platformShare = msg.value - organizerShare;
+
+        (bool sent1,) = payable(eventOrganizer).call{value: organizerShare}("");
+        if (!sent1) {
+            revert EventTicket__OrganizerPaymentFailed();
+        }
+
+        (bool sent2,) = payable(platformAddress).call{value: platformShare}("");
+        if (!sent2) {
+            revert EventTicket__PlatformPaymentFailed();
+        }
+
+        emit TicketMinted(msg.sender, ticketId, _seatNumber, _isVIP);
+    }
+
+    function royaltyInfo(uint256 tokenId, uint256 salePrice)
+        external
+        view
+        override
+        returns (address receiver, uint256 royaltyAmount)
+    {   
+        _requireOwned(tokenId);
+        receiver = eventOrganizer;
+        royaltyAmount = (salePrice * i_royaltyFeePercentage) / 100;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721URIStorage, IERC165) returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
+    }
+}
