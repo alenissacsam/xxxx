@@ -1,30 +1,44 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
-import "./EventTicket.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import {EventTicket} from "./EventTicket.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+/**
+ * @title EventFactory
+ * @author alenissacsam
+ * @dev A factory contract for creating and managing custom event ticket contracts.
+ */
 contract EventFactory is Ownable {
-    
-    address public platformAddress;
-    address public immutable i_userVerfierAddress;
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /*//////////////////////////////////////////////////////////////
+                               VARIABLES
+    //////////////////////////////////////////////////////////////*/
+    address public immutable I_PLATFORM_ADDRESS;
+    address public immutable I_USER_VERFIER_ADDRESS;
     EventTicket[] public deployedEvents;
-    
+
     mapping(address => EventTicket[]) public organizerEvents;
-    
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
     event EventCreated(
-        address indexed organizer,
-        address indexed eventContract,
-        string name,
-        uint256 maxSupply,
-        uint256 mintPrice
+        address indexed organizer, address indexed eventContract, string name, uint256 maxSupply, uint256 mintPrice
     );
-    
-    constructor(address _platformAddress, address _userVerfierAddress) Ownable(msg.sender){
-        platformAddress = _platformAddress;
-        i_userVerfierAddress = _userVerfierAddress;
+
+    /*//////////////////////////////////////////////////////////////
+                               FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    constructor(address _platformAddress, address _userVerfierAddress) Ownable(msg.sender) {
+        I_PLATFORM_ADDRESS = _platformAddress;
+        I_USER_VERFIER_ADDRESS = _userVerfierAddress;
     }
-    
+
     function createEvent(
         string memory name,
         string memory symbol,
@@ -39,24 +53,28 @@ contract EventFactory is Ownable {
             maxSupply,
             mintPrice,
             msg.sender, // organizer
-            platformAddress,
+            I_PLATFORM_ADDRESS,
             organizerPercentage,
-            i_userVerfierAddress,
+            I_USER_VERFIER_ADDRESS,
             royaltyFeePercentage
         );
-        
+
         deployedEvents.push(newEvent);
         organizerEvents[msg.sender].push(newEvent);
-        
+
         emit EventCreated(msg.sender, address(newEvent), name, maxSupply, mintPrice);
-        
+
         return newEvent;
     }
-    
+
+    /*//////////////////////////////////////////////////////////////
+                        EXTERNAL VIEW FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
     function getDeployedEvents() external view returns (EventTicket[] memory) {
         return deployedEvents;
     }
-    
+
     function getOrganizerEvents(address organizer) external view returns (EventTicket[] memory) {
         return organizerEvents[organizer];
     }

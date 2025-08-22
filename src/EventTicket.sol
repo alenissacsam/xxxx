@@ -2,17 +2,16 @@
 
 pragma solidity ^0.8.30;
 
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/interfaces/IERC2981.sol";
+import {ERC721URIStorage,ERC721,IERC165} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import {UserVerification} from "./UserVerification.sol";
 
 /**
  * @title EventTicket
  * @author alenissacsam
- * @dev A smart contract for managing event tickets on the blockchain.
- * It allows event organizers to mint tickets, verify users, and manage ticket sales.
+ * @dev A smart contract for Creating event tickets.
  */
 contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
     /*//////////////////////////////////////////////////////////////
@@ -25,6 +24,7 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
     error EventTicket__InvalidOrganizerPercentage(uint256 percentage);
     error EventTicket__OrganizerPaymentFailed();
     error EventTicket__PlatformPaymentFailed();
+    error EventTicket__SupplyCannotBeZero();
 
     /*//////////////////////////////////////////////////////////////
                                VARIABLES
@@ -46,9 +46,9 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
     mapping(uint256 tokenId => TicketInfo) tickets;
 
     uint256 public constant MINT_COOLDOWN = 5 seconds;
-    uint256 public immutable i_organizerPercentage; // 95% to organizer
-    uint256 public immutable i_royaltyFeePercentage; // royalty fee on secondary Markets
-    address public immutable i_userVerfierAddress;
+    uint256 public immutable I_ORGANIZER_PERCENTAGE; // 95% to organizer
+    uint256 public immutable I_ROYALTY_FEE_PERCENTAGE; // royalty fee on secondary Markets
+    address public immutable I_USER_VERFIER_ADDRESS;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -61,7 +61,7 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
     //////////////////////////////////////////////////////////////*/
 
     modifier onlyVerified() {
-        if (!UserVerification(i_userVerfierAddress).isVerified(msg.sender)) {
+        if (!UserVerification(I_USER_VERFIER_ADDRESS).isVerified(msg.sender)) {
             revert EventTicket__UserNotVerified();
         }
         _;
@@ -89,9 +89,12 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
         address _userVerfierAddress,
         uint256 _royaltyFeePercentage
     ) ERC721(name, symbol) Ownable(msg.sender) {
+        if(maxSupply == 0 ) {
+            revert EventTicket__SupplyCannotBeZero();
+        }
         maxSupply = _maxSupply;
         mintPrice = _mintPrice;
-        if (_organizerPercentage > 100) {
+        if (_organizerPercentage > 98 || _royaltyFeePercentage > 10) {
             revert EventTicket__InvalidOrganizerPercentage(_organizerPercentage);
         }
         if (_eventOrganizer == address(0) || _platformAddress == address(0) || _userVerfierAddress == address(0)) {
@@ -99,9 +102,9 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
         }
         eventOrganizer = _eventOrganizer;
         platformAddress = _platformAddress;
-        i_organizerPercentage = _organizerPercentage;
-        i_userVerfierAddress = _userVerfierAddress;
-        i_royaltyFeePercentage = _royaltyFeePercentage;
+        I_ORGANIZER_PERCENTAGE = _organizerPercentage;
+        I_USER_VERFIER_ADDRESS = _userVerfierAddress;
+        I_ROYALTY_FEE_PERCENTAGE = _royaltyFeePercentage;
     }
 
     function mintTicket(string memory _eventName, string memory _seatNumber, bool _isVIP, string memory tokenURI)
@@ -124,7 +127,7 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
         lastMintTime[msg.sender] = block.timestamp;
 
         // Distribute funds
-        uint256 organizerShare = (msg.value * i_organizerPercentage) / 100;
+        uint256 organizerShare = (msg.value * I_ORGANIZER_PERCENTAGE) / 10000;
         uint256 platformShare = msg.value - organizerShare;
 
         (bool sent1,) = payable(eventOrganizer).call{value: organizerShare}("");
@@ -148,7 +151,7 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
     {   
         _requireOwned(tokenId);
         receiver = eventOrganizer;
-        royaltyAmount = (salePrice * i_royaltyFeePercentage) / 100;
+        royaltyAmount = (salePrice * I_ROYALTY_FEE_PERCENTAGE) / 10000;
     }
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC721URIStorage, IERC165) returns (bool) {
