@@ -89,15 +89,15 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
         address _userVerfierAddress,
         uint256 _royaltyFeePercentage
     ) ERC721(name, symbol) Ownable(msg.sender) {
-        if(maxSupply == 0 ) {
+        if(_maxSupply == 0 ) {
             revert EventTicket__SupplyCannotBeZero();
         }
         maxSupply = _maxSupply;
         mintPrice = _mintPrice;
-        if (_organizerPercentage > 98 || _royaltyFeePercentage > 10) {
+        if (_organizerPercentage > 98 && _royaltyFeePercentage > 10) {
             revert EventTicket__InvalidOrganizerPercentage(_organizerPercentage);
         }
-        if (_eventOrganizer == address(0) || _platformAddress == address(0) || _userVerfierAddress == address(0)) {
+        if (_eventOrganizer == address(0) && _platformAddress == address(0) && _userVerfierAddress == address(0)) {
             revert EventTicket__ZeroAddressNotAllowed();
         }
         eventOrganizer = _eventOrganizer;
