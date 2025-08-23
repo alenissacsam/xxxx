@@ -5,13 +5,14 @@ import {IERC721, IERC165} from "@openzeppelin/contracts/token/ERC721/IERC721.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {UserVerification} from "./UserVerification.sol";
 
 /**
  * @title TicketMarketplace
  * @author alenissacsam
  * @dev marketplace with proper auction functionality and security fixes
  */
-contract ImprovedTicketMarketplace is ReentrancyGuard, Ownable {
+contract TicketMarketplace is ReentrancyGuard, Ownable {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -33,6 +34,7 @@ contract ImprovedTicketMarketplace is ReentrancyGuard, Ownable {
         FIXED_PRICE,
         AUCTION
     }
+
     enum AuctionStatus {
         ACTIVE,
         ENDED,
@@ -63,19 +65,21 @@ contract ImprovedTicketMarketplace is ReentrancyGuard, Ownable {
     /*//////////////////////////////////////////////////////////////
                                STORAGE
     //////////////////////////////////////////////////////////////*/
+
     mapping(bytes32 => Listing) public listings;
     mapping(bytes32 => Auction) public auctions;
     mapping(address => uint256) public tokenContractVolume;
     mapping(uint256 => uint256) public dailyVolume;
 
-    // Packed struct for gas optimization
     struct PlatformConfig {
-        uint128 platformFeePercent; // 2.5% = 250
-        uint128 maxAuctionDuration; // Maximum auction duration
+        uint256 platformFeePercent;
+        uint256 maxAuctionDuration;
     }
 
     PlatformConfig public config;
+
     address public immutable PLATFORM_ADDRESS;
+    address public immutable I_USER_VERFIER_ADDRESS;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -116,13 +120,17 @@ contract ImprovedTicketMarketplace is ReentrancyGuard, Ownable {
 
     constructor(
         address _platformAddress,
-        uint128 _platformFeePercent
+        uint256 _platformFeePercent,
+        uint256 _maxAuctionDuration,
+        address _userVerfierAddress
     ) Ownable(msg.sender) {
         PLATFORM_ADDRESS = _platformAddress;
+
         config = PlatformConfig({
             platformFeePercent: _platformFeePercent,
-            maxAuctionDuration: 30 days
+            maxAuctionDuration: _maxAuctionDuration
         });
+        I_USER_VERFIER_ADDRESS = _userVerfierAddress;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -485,7 +493,7 @@ contract ImprovedTicketMarketplace is ReentrancyGuard, Ownable {
                         OWNER FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function updatePlatformFee(uint128 newFee) external onlyOwner {
+    function updatePlatformFee(uint256 newFee) external onlyOwner {
         require(newFee <= 1000, "Fee too high"); // Max 10%
         config.platformFeePercent = newFee;
     }

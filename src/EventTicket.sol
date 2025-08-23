@@ -94,7 +94,7 @@ contract EventTicket is ERC721URIStorage, IERC2981, ReentrancyGuard, Ownable {
         }
         maxSupply = _maxSupply;
         mintPrice = _mintPrice;
-        if (_organizerPercentage > 98 && _royaltyFeePercentage > 10) {
+        if (_organizerPercentage > 9800 && _royaltyFeePercentage > 1000) {
             revert EventTicket__InvalidOrganizerPercentage(_organizerPercentage);
         }
         if (_eventOrganizer == address(0) && _platformAddress == address(0) && _userVerfierAddress == address(0)) {
